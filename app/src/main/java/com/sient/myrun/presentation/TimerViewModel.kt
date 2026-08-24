@@ -50,7 +50,10 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     // system freezes the app and the countdown stalls, then jumps on wake.
     private val wakeLock by lazy {
         val pm = application.getSystemService(Context.POWER_SERVICE) as PowerManager
-        pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyRun:interval-timer")
+        pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyRun:interval-timer").apply {
+            // One release always fully releases, even if acquire ever runs twice.
+            setReferenceCounted(false)
+        }
     }
 
     fun adjustRunSeconds(delta: Int) {
