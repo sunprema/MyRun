@@ -3,6 +3,7 @@ package com.sient.myrun.presentation
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,14 +14,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.wear.ambient.AmbientLifecycleObserver
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
@@ -34,36 +36,100 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.sient.myrun.presentation.theme.MyRunTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val isAmbient = mutableStateOf(false)
+    private val burnInProtection = mutableStateOf(false)
+
+    private val ambientObserver by lazy {
+        AmbientLifecycleObserver(this, object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+            override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
+                burnInProtection.value = ambientDetails.burnInProtectionRequired
+                isAmbient.value = true
+            }
+
+            override fun onExitAmbient() {
+                isAmbient.value = false
+            }
+
+            override fun onUpdateAmbient() {}
+        })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycle.addObserver(ambientObserver)
         setContent {
-            MyRunApp()
+            MyRunApp(isAmbient.value, burnInProtection.value)
+        }
+    }
+
+    override fun onDestroy() {
+        lifecycle.removeObserver(ambientObserver)
+        super.onDestroy()
+    }
+}
+
+@Composable
+fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean) {
+    val vm: TimerViewModel = viewModel()
+
+    MyRunTheme {
+        if (isAmbient) {
+            AmbientTimerScreen(vm, burnInProtection)
+        } else {
+            AppScaffold {
+                val navController = rememberSwipeDismissableNavController()
+                SwipeDismissableNavHost(navController = navController, startDestination = "timer") {
+                    composable("timer") {
+                        TimerScreen(vm, onOpenSettings = { navController.navigate("settings") })
+                    }
+                    composable("settings") {
+                        SettingsScreen(vm)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-fun MyRunApp() {
-    val vm: TimerViewModel = viewModel()
-
-    // Keep the screen awake while an interval is running so ticking and
-    // vibration are never paused by the watch going to sleep.
-    val view = LocalView.current
-    LaunchedEffect(vm.isRunning) {
-        view.keepScreenOn = vm.isRunning
+fun AmbientTimerScreen(vm: TimerViewModel, burnInProtection: Boolean) {
+    // Low-power face: pure black, dim gray text, no buttons. With burn-in
+    // protection the block of text drifts a little each minute.
+    val offset = if (burnInProtection) {
+        ((vm.totalSeconds / 60) % 3 - 1) * 6
+    } else {
+        0
     }
-
-    MyRunTheme {
-        AppScaffold {
-            val navController = rememberSwipeDismissableNavController()
-            SwipeDismissableNavHost(navController = navController, startDestination = "timer") {
-                composable("timer") {
-                    TimerScreen(vm, onOpenSettings = { navController.navigate("settings") })
-                }
-                composable("settings") {
-                    SettingsScreen(vm)
-                }
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(top = offset.dp.coerceAtLeast(0.dp)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = vm.currentPhase.name,
+            color = Color(0xFF9A93B0),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = formatTime(vm.timeLeft),
+            fontSize = 46.sp,
+            color = Color(0xFFBFB8D4)
+        )
+        Text(
+            text = "total ${formatTime(vm.totalSeconds)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF9A93B0)
+        )
+        if (!vm.isRunning) {
+            Text(
+                text = "paused",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF6E6885)
+            )
         }
     }
 }
