@@ -118,7 +118,7 @@ class TimerService : Service() {
     companion object {
         private const val CHANNEL_ID = "interval_timer"
         private const val NOTIFICATION_ID = 1
-        // Wake lock safety timeout: no morning run needs more than 4 hours.
-        private const val MAX_WORKOUT_MS = 4 * 60 * 60 * 1000L
+        // Wake lock safety timeout: longest run is about an hour, so cap at 1.5h.
+        private const val MAX_WORKOUT_MS = 90 * 60 * 1000L
     }
 }
