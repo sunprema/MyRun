@@ -229,9 +229,10 @@ On Wear OS, when the screen dims the system normally replaces the app with the w
 The callback flips two `mutableStateOf` flags held in the Activity and passed into Compose:
 
 - `isAmbient` — switches the whole tree to `AmbientTimerScreen`: pure black background, dim greys, larger countdown, no buttons, and a "paused" hint if the timer isn't running. Fewer lit pixels = less OLED power.
-- `burnInProtection` — if the hardware asks for it, the text block shifts vertically by `((totalSeconds/60) % 3 − 1) × 6 dp`, i.e. it drifts −6 / 0 / +6 dp on a minute cycle so static pixels don't burn in. (`coerceAtLeast(0)` on the padding means the −6 case renders as 0; the visible effect is a 0/0/6 pattern. Harmless, but note it if you touch this.)
+- `burnInProtection` — if the hardware asks for it, the text block is shifted with `Modifier.offset(y = ((ambientMinute % 3) − 1) × 6 dp)`, i.e. it drifts −6 / 0 / +6 dp on a three-minute cycle so static pixels don't burn in. `offset` is used rather than `padding` because it accepts negative values.
+- `ambientMinute` — the wall-clock minute (`System.currentTimeMillis() / 60 000`), captured in `onEnterAmbient` and refreshed in `onUpdateAmbient()`, which the system calls about once a minute precisely so ambient apps can update. Keying the drift off the wall clock (not `totalSeconds`) means it keeps moving while the timer is paused — the very case where the watch sits static in ambient for a long time.
 
-`onUpdateAmbient()` is intentionally empty: the system calls it roughly once a minute to let ambient apps refresh, but this app's state is already being updated 5×/s by the service and Compose recomposes on its own, so nothing extra is needed. Note the ambient screen does **not** keep the timer running — that's the service's job. The ambient face just makes it visible.
+Note the ambient screen does **not** keep the timer running — that's the service's job. The ambient face just makes it visible.
 
 ---
 
@@ -316,6 +317,7 @@ These are the bugs that shaped the architecture. Understanding them prevents rei
 | Timer stopped once user returned to the watch face, even with wake lock. | System froze the app process; frozen apps' wake locks are disabled. | Move ticking, vibration and wake lock into a foreground service; replace ViewModel with `TimerEngine` singleton; ongoing-activity chip. | `4d54b52` |
 | Forgotten timer drained battery for hours. | 4 h wake-lock timeout. | 90 min timeout. | `3ac390e` |
 | Release build failed lint-vital. | Transitive `fragment:1.2.4` < 1.3.0 required by ActivityResult. | Pin `fragment:1.8.5`. | `56a9aa1` |
+| Burn-in drift only moved 0/0/+6 dp and froze while paused. | Drift applied via `padding`, which can't go negative, and keyed off `totalSeconds`. | Use `Modifier.offset`; key off the wall-clock minute refreshed by `onUpdateAmbient()`. | see git log |
 
 The recurring lesson: **on Wear OS, anything that must keep happening after the user drops their wrist has to run in a foreground service with a wake lock, and must compute its state from a monotonic clock rather than from counted ticks.**
 

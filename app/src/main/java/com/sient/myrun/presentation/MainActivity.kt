@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,9 @@ class MainActivity : ComponentActivity() {
 
     private val isAmbient = mutableStateOf(false)
     private val burnInProtection = mutableStateOf(false)
+    // Wall-clock minute, refreshed by the system's ambient updates, so the
+    // burn-in drift keeps moving even while the timer is paused.
+    private val ambientMinute = mutableLongStateOf(0L)
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -51,6 +56,7 @@ class MainActivity : ComponentActivity() {
         AmbientLifecycleObserver(this, object : AmbientLifecycleObserver.AmbientLifecycleCallback {
             override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
                 burnInProtection.value = ambientDetails.burnInProtectionRequired
+                ambientMinute.longValue = currentMinute()
                 isAmbient.value = true
             }
 
@@ -58,7 +64,9 @@ class MainActivity : ComponentActivity() {
                 isAmbient.value = false
             }
 
-            override fun onUpdateAmbient() {}
+            override fun onUpdateAmbient() {
+                ambientMinute.longValue = currentMinute()
+            }
         })
     }
 
@@ -73,7 +81,7 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
-            MyRunApp(isAmbient.value, burnInProtection.value)
+            MyRunApp(isAmbient.value, burnInProtection.value, ambientMinute.longValue)
         }
     }
 
@@ -81,13 +89,15 @@ class MainActivity : ComponentActivity() {
         lifecycle.removeObserver(ambientObserver)
         super.onDestroy()
     }
+
+    private fun currentMinute() = System.currentTimeMillis() / 60_000L
 }
 
 @Composable
-fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean) {
+fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean, ambientMinute: Long) {
     MyRunTheme {
         if (isAmbient) {
-            AmbientTimerScreen(burnInProtection)
+            AmbientTimerScreen(burnInProtection, ambientMinute)
         } else {
             AppScaffold {
                 val navController = rememberSwipeDismissableNavController()
@@ -105,11 +115,12 @@ fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean) {
 }
 
 @Composable
-fun AmbientTimerScreen(burnInProtection: Boolean) {
+fun AmbientTimerScreen(burnInProtection: Boolean, ambientMinute: Long) {
     // Low-power face: pure black, dim gray text, no buttons. With burn-in
-    // protection the block of text drifts a little each minute.
+    // protection the block of text drifts -6/0/+6 dp on a three-minute cycle,
+    // keyed off the wall clock so it moves even when the timer is paused.
     val offset = if (burnInProtection) {
-        ((TimerEngine.totalSeconds / 60) % 3 - 1) * 6
+        ((ambientMinute % 3).toInt() - 1) * 6
     } else {
         0
     }
@@ -117,7 +128,7 @@ fun AmbientTimerScreen(burnInProtection: Boolean) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(top = offset.dp.coerceAtLeast(0.dp)),
+            .offset(y = offset.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
