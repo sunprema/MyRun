@@ -3,6 +3,7 @@ package com.sient.myrun.presentation
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -45,6 +46,13 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
     private var accumulatedMs = 0L
     private var sessionStartElapsed = 0L
 
+    // Keeps the CPU ticking while the screen is in ambient mode; without it the
+    // system freezes the app and the countdown stalls, then jumps on wake.
+    private val wakeLock by lazy {
+        val pm = application.getSystemService(Context.POWER_SERVICE) as PowerManager
+        pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyRun:interval-timer")
+    }
+
     fun adjustRunSeconds(delta: Int) {
         runSeconds = (runSeconds + delta).coerceIn(MIN_INTERVAL, MAX_INTERVAL)
         prefs.edit().putInt(KEY_RUN, runSeconds).apply()
@@ -64,15 +72,20 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         isRunning = true
         phaseEndElapsed = SystemClock.elapsedRealtime() + timeLeft * 1000L
         sessionStartElapsed = SystemClock.elapsedRealtime()
+        @Suppress("WakelockTimeout")
+        if (!wakeLock.isHeld) wakeLock.acquire(MAX_WORKOUT_MS)
         job = viewModelScope.launch {
             while (isActive) {
-                val remainingMs = phaseEndElapsed - SystemClock.elapsedRealtime()
-                if (remainingMs <= 0) {
+                // Advance as many phases as the clock says have elapsed (normally
+                // one), but buzz only once so a stall can't fire a burst.
+                var switched = false
+                while (phaseEndElapsed <= SystemClock.elapsedRealtime()) {
                     currentPhase = if (currentPhase == Phase.RUN) Phase.WALK else Phase.RUN
                     val nextSeconds = if (currentPhase == Phase.RUN) runSeconds else walkSeconds
                     phaseEndElapsed += nextSeconds * 1000L
-                    vibrateForPhase(currentPhase)
+                    switched = true
                 }
+                if (switched) vibrateForPhase(currentPhase)
                 timeLeft = (((phaseEndElapsed - SystemClock.elapsedRealtime()) + 999) / 1000)
                     .toInt().coerceAtLeast(0)
                 totalSeconds = ((accumulatedMs +
@@ -89,6 +102,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         isRunning = false
         job?.cancel()
         job = null
+        if (wakeLock.isHeld) wakeLock.release()
     }
 
     fun reset() {
@@ -119,6 +133,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         job?.cancel()
+        if (wakeLock.isHeld) wakeLock.release()
         super.onCleared()
     }
 
@@ -127,5 +142,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_WALK = "walk_seconds"
         private const val MIN_INTERVAL = 30
         private const val MAX_INTERVAL = 30 * 60
+        // Wake lock safety timeout: no morning run needs more than 4 hours.
+        private const val MAX_WORKOUT_MS = 4 * 60 * 60 * 1000L
     }
 }
