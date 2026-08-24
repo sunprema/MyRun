@@ -23,6 +23,10 @@ android {
             optimization {
                 enable = false
             }
+            // Personal sideload build: sign with the debug keystore so the APK
+            // installs over the debug build. Replace with a real keystore before
+            // publishing to Play.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -38,6 +42,7 @@ android {
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.activity.compose)
+    implementation(libs.fragment)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.navigation)
