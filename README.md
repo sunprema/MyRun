@@ -4,6 +4,14 @@ A minimal run/walk interval timer for Wear OS (built and tested on a Samsung Gal
 
 It alternates between two configurable intervals — e.g. **run 1:00**, then **walk 3:00** — buzzing the wrist and switching the display each time a phase ends. The timer keeps ticking with the screen off (foreground service + wake lock) and shows a low-power face in ambient mode.
 
+## Demo
+
+<p align="center">
+  <img src="docs/demo.gif" width="240" alt="Demo: set the run interval to 0:30, start, run phase counts down, watch buzzes and flips to WALK, then pause and reset">
+</p>
+
+<p align="center"><sub>Shown at 2× speed. <a href="docs/demo.mp4">Real-time MP4</a>.</sub></p>
+
 ## Screenshots
 
 <table>
