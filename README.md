@@ -50,6 +50,10 @@ Requires Android Studio with the Wear OS SDK (minSdk 30).
 adb -s <watch-serial> install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Developer guide
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the modules fit together, how the timer keeps running in the background (foreground service + wake lock + monotonic deadline), how vibration is wired, and the history of bugs that shaped the design.
+
 ## Project layout
 
 | File | Purpose |
