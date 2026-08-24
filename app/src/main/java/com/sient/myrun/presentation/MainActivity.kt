@@ -79,7 +79,7 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
             Phase.WALK -> MaterialTheme.colorScheme.tertiary
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(top = 30.dp),
+            modifier = Modifier.fillMaxSize().padding(top = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -91,7 +91,7 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
             )
             Text(
                 text = formatTime(vm.timeLeft),
-                fontSize = 52.sp,
+                fontSize = 46.sp,
                 fontWeight = FontWeight.Bold,
                 color = phaseColor
             )
@@ -100,7 +100,13 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "total ${formatTime(vm.totalSeconds)}",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(
                     onClick = { vm.toggle() },

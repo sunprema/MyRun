@@ -35,10 +35,15 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var timeLeft by mutableIntStateOf(runSeconds)
         private set
+    var totalSeconds by mutableIntStateOf(0)
+        private set
 
     private var job: Job? = null
     // Absolute deadline on the monotonic clock, so ticking never drifts.
     private var phaseEndElapsed = 0L
+    // Workout time accumulated across pauses, plus the anchor of the current stretch.
+    private var accumulatedMs = 0L
+    private var sessionStartElapsed = 0L
 
     fun adjustRunSeconds(delta: Int) {
         runSeconds = (runSeconds + delta).coerceIn(MIN_INTERVAL, MAX_INTERVAL)
@@ -58,6 +63,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         if (isRunning) return
         isRunning = true
         phaseEndElapsed = SystemClock.elapsedRealtime() + timeLeft * 1000L
+        sessionStartElapsed = SystemClock.elapsedRealtime()
         job = viewModelScope.launch {
             while (isActive) {
                 val remainingMs = phaseEndElapsed - SystemClock.elapsedRealtime()
@@ -69,12 +75,17 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 timeLeft = (((phaseEndElapsed - SystemClock.elapsedRealtime()) + 999) / 1000)
                     .toInt().coerceAtLeast(0)
+                totalSeconds = ((accumulatedMs +
+                    (SystemClock.elapsedRealtime() - sessionStartElapsed)) / 1000).toInt()
                 delay(200)
             }
         }
     }
 
     fun pause() {
+        if (isRunning) {
+            accumulatedMs += SystemClock.elapsedRealtime() - sessionStartElapsed
+        }
         isRunning = false
         job?.cancel()
         job = null
@@ -84,6 +95,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         pause()
         currentPhase = Phase.RUN
         timeLeft = runSeconds
+        accumulatedMs = 0L
+        totalSeconds = 0
     }
 
     private fun vibrateForPhase(phase: Phase) {
