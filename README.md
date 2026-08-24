@@ -50,3 +50,7 @@ adb -s <watch-serial> install -r app/build/outputs/apk/debug/app-debug.apk
 | `app/src/main/java/com/sient/myrun/presentation/TimerEngine.kt` | Timer state, phase switching, vibration, persistence |
 | `app/src/main/java/com/sient/myrun/presentation/TimerService.kt` | Foreground service + wake lock so the timer survives screen-off |
 | `app/src/main/java/com/sient/myrun/presentation/theme/Theme.kt` | Material 3 theme for Wear |
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
