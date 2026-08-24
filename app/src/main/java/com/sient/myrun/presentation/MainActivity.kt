@@ -1,8 +1,12 @@
 package com.sient.myrun.presentation
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,10 +22,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.ambient.AmbientLifecycleObserver
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Button
@@ -40,6 +44,9 @@ class MainActivity : ComponentActivity() {
     private val isAmbient = mutableStateOf(false)
     private val burnInProtection = mutableStateOf(false)
 
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     private val ambientObserver by lazy {
         AmbientLifecycleObserver(this, object : AmbientLifecycleObserver.AmbientLifecycleCallback {
             override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
@@ -57,7 +64,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TimerEngine.load(this)
         lifecycle.addObserver(ambientObserver)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent {
             MyRunApp(isAmbient.value, burnInProtection.value)
         }
@@ -71,20 +85,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean) {
-    val vm: TimerViewModel = viewModel()
-
     MyRunTheme {
         if (isAmbient) {
-            AmbientTimerScreen(vm, burnInProtection)
+            AmbientTimerScreen(burnInProtection)
         } else {
             AppScaffold {
                 val navController = rememberSwipeDismissableNavController()
                 SwipeDismissableNavHost(navController = navController, startDestination = "timer") {
                     composable("timer") {
-                        TimerScreen(vm, onOpenSettings = { navController.navigate("settings") })
+                        TimerScreen(onOpenSettings = { navController.navigate("settings") })
                     }
                     composable("settings") {
-                        SettingsScreen(vm)
+                        SettingsScreen()
                     }
                 }
             }
@@ -93,11 +105,11 @@ fun MyRunApp(isAmbient: Boolean, burnInProtection: Boolean) {
 }
 
 @Composable
-fun AmbientTimerScreen(vm: TimerViewModel, burnInProtection: Boolean) {
+fun AmbientTimerScreen(burnInProtection: Boolean) {
     // Low-power face: pure black, dim gray text, no buttons. With burn-in
     // protection the block of text drifts a little each minute.
     val offset = if (burnInProtection) {
-        ((vm.totalSeconds / 60) % 3 - 1) * 6
+        ((TimerEngine.totalSeconds / 60) % 3 - 1) * 6
     } else {
         0
     }
@@ -110,21 +122,21 @@ fun AmbientTimerScreen(vm: TimerViewModel, burnInProtection: Boolean) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = vm.currentPhase.name,
+            text = TimerEngine.currentPhase.name,
             color = Color(0xFF9A93B0),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
-            text = formatTime(vm.timeLeft),
+            text = formatTime(TimerEngine.timeLeft),
             fontSize = 46.sp,
             color = Color(0xFFBFB8D4)
         )
         Text(
-            text = "total ${formatTime(vm.totalSeconds)}",
+            text = "total ${formatTime(TimerEngine.totalSeconds)}",
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFF9A93B0)
         )
-        if (!vm.isRunning) {
+        if (!TimerEngine.isRunning) {
             Text(
                 text = "paused",
                 style = MaterialTheme.typography.bodySmall,
@@ -138,9 +150,10 @@ private fun formatTime(totalSeconds: Int): String =
     "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
 
 @Composable
-fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
+fun TimerScreen(onOpenSettings: () -> Unit) {
     ScreenScaffold {
-        val phaseColor = when (vm.currentPhase) {
+        val context = LocalContext.current
+        val phaseColor = when (TimerEngine.currentPhase) {
             Phase.RUN -> MaterialTheme.colorScheme.primary
             Phase.WALK -> MaterialTheme.colorScheme.tertiary
         }
@@ -150,24 +163,24 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = vm.currentPhase.name,
+                text = TimerEngine.currentPhase.name,
                 color = phaseColor,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = formatTime(vm.timeLeft),
+                text = formatTime(TimerEngine.timeLeft),
                 fontSize = 46.sp,
                 fontWeight = FontWeight.Bold,
                 color = phaseColor
             )
             Text(
-                text = "run ${formatTime(vm.runSeconds)} · walk ${formatTime(vm.walkSeconds)}",
+                text = "run ${formatTime(TimerEngine.runSeconds)} · walk ${formatTime(TimerEngine.walkSeconds)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "total ${formatTime(vm.totalSeconds)}",
+                text = "total ${formatTime(TimerEngine.totalSeconds)}",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary
@@ -175,17 +188,17 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(
-                    onClick = { vm.toggle() },
-                    colors = if (vm.isRunning) {
+                    onClick = { TimerEngine.toggle(context) },
+                    colors = if (TimerEngine.isRunning) {
                         ButtonDefaults.filledTonalButtonColors()
                     } else {
                         ButtonDefaults.buttonColors()
                     }
                 ) {
-                    Text(if (vm.isRunning) "Pause" else "Start")
+                    Text(if (TimerEngine.isRunning) "Pause" else "Start")
                 }
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { vm.reset() }) {
+                OutlinedButton(onClick = { TimerEngine.reset(context) }) {
                     Text("Reset")
                 }
             }
@@ -198,8 +211,9 @@ fun TimerScreen(vm: TimerViewModel, onOpenSettings: () -> Unit) {
 }
 
 @Composable
-fun SettingsScreen(vm: TimerViewModel) {
+fun SettingsScreen() {
     ScreenScaffold {
+        val context = LocalContext.current
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -207,14 +221,14 @@ fun SettingsScreen(vm: TimerViewModel) {
         ) {
             IntervalStepper(
                 label = "Run",
-                seconds = vm.runSeconds,
-                onAdjust = { vm.adjustRunSeconds(it) }
+                seconds = TimerEngine.runSeconds,
+                onAdjust = { TimerEngine.adjustRunSeconds(context, it) }
             )
             Spacer(Modifier.height(12.dp))
             IntervalStepper(
                 label = "Walk",
-                seconds = vm.walkSeconds,
-                onAdjust = { vm.adjustWalkSeconds(it) }
+                seconds = TimerEngine.walkSeconds,
+                onAdjust = { TimerEngine.adjustWalkSeconds(context, it) }
             )
         }
     }
